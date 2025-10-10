@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weekly WorkLog — CÓDIGO FUENTE (estable)</title>
+  <style>
+    :root{ --panel-bg: rgba(255,255,255,0.92); --card-bg: rgba(255,255,255,0.96);}  
+    body { font-family: Arial, sans-serif; margin: 0; background:#f4f4f4; color: #333; }
+    /* Marca de agua (si el archivo no existe no pasa nada) */
+    body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; 
+      background: url('IMG_2548.jpeg') no-repeat center 20%/min(85vw,900px) auto; opacity:.08; }
+    header { background: #222; color: #fff; padding: 1em; text-align: center; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 20px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 20px; justify-content: flex-end; flex-wrap: wrap; background: var(--panel-bg); padding: 12px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,.1)}
+    .card { background: var(--card-bg); padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.2); margin-bottom: 20px; }
+    label { display: block; margin-top: 10px; font-size: 14px; }
+    input, textarea, select, button { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; }
+    button { cursor: pointer; font-weight: bold; }
+    button.btn { background: #28a745; color: #fff; border: none; }
+    button.btn-danger { background: #dc3545; color: #fff; border: none; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #eee; }
+    .thumb img { max-width: 80px; max-height: 80px; border-radius: 6px; cursor: pointer; }
+    dialog { border: none; border-radius: 6px; padding: 12px; }
+    .error-banner {position:fixed;left:0;right:0;bottom:0;background:#b91c1c;color:#fff;padding:8px 12px;font-size:14px;display:none}
+    #modalImg { max-width: 90vw; max-height: 80vh; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Weekly WorkLog</h1>
+    <p>Track hours, tasks, expenses & photo receipts</p>
+  </header>
+
+  <div class="container">
+    <div class="toolbar">
+      <label>View
+        <select id="viewMode">
+          <option value="week" selected>Week</option>
+          <option value="day">Day</option>
+          <option value="month">Month</option>
+          <option value="year">Year</option>
+        </select>
+      </label>
+      <label>Date
+        <input id="calendarDate" type="date">
+      </label>
+      <button id="closeWeekBtn" class="btn" type="button">Close Week</button>
+      <button id="printPeriodBtn" type="button">Print PDF</button>
+      <button id="openSearchBtn" type="button">Search</button>
+    </div>
+
+    <section class="card">
+      <h3>Add / Edit entry</h3>
+      <label>Date <input id="date" type="date"></label>
+      <label>Hours worked <input id="hours" type="number" step="0.01"></label>
+      <label>What was done <textarea id="task" rows="3"></textarea></label>
+      <label>Expense <input id="amount" type="number" step="0.01"></label>
+      <label>Vendor <input id="vendor"></label>
+      <label>Receipt photo
+        <input id="receiptInput" type="file" accept="image/*" capture="environment">
+      </label>
+      <div class="thumb" id="thumb"></div>
+      <button class="btn" id="openCamBtn" type="button">Open Camera</button>
+      <div style="margin-top:10px;display:flex;gap:10px;">
+        <button class="btn" id="saveBtn" type="button">Save</button>
+        <button id="clearFormBtn" type="button">Clear</button>
+        <button class="btn-danger" id="deleteBtn" type="button">Delete</button>
+      </div>
+      <p id="status"></p>
+      <div style="margin-top:12px">
+        <h4 style="margin:6px 0 4px">History</h4>
+        <ul id="historyList" style="max-height:160px;overflow:auto;margin:0;padding-left:18px"></ul>
+        <button id="clearHistoryBtn" type="button" class="btn-danger" style="margin-top:8px">Clear History</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Entries</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Hours</th><th>Description</th><th>Vendor</th><th>Expense</th><th>Receipt</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h3>Backup & Restore <small id="backupLockStatus" style="font-weight:normal;color:#555">🔒 Locked</small></h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="exportBtn" type="button">Export Backup</button>
+        <button id="importBtn" type="button">Import Backup</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none">
+      </div>
+      <small>Backup includes all entries. Import will replace current data after confirmation.</small>
+    </section>
+  </div>
+
+  <dialog id="imgModal">
+    <img id="modalImg" alt="Receipt">
+    <button id="closeModalBtn" type="button">Close</button>
+  </dialog>
+
+  <dialog id="camModal">
+    <video id="camVideo" autoplay playsinline></video>
+    <button id="snapBtn" type="button">Snap</button>
+    <button id="closeCamBtn" type="button">Close</button>
+  </dialog>
+
+  <dialog id="searchModal">
+    <div>
+      <h3>Search entries</h3>
+      <label>Date <input id="searchDate" type="date"></label>
+      <label>Vendor <input id="searchVendor" type="text" placeholder="e.g., Home Depot"></label>
+      <label>Description <input id="searchDesc" type="text" placeholder="keyword in description"></label>
+      <label>Amount (exact) <input id="searchAmount" type="number" step="0.01" placeholder="e.g., 120"></label>
+      <div style="display:flex;gap:8px;margin:8px 0">
+        <button id="runSearchBtn" type="button">Search</button>
+        <button id="clearSearchBtn" type="button">Clear</button>
+        <button id="printSearchBtn" type="button">Print results</button>
+        <button id="closeSearchBtn" type="button">Close</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr><th style="border:1px solid #ccc;padding:6px">Date</th><th style="border:1px solid #ccc;padding:6px">Hours</th><th style="border:1px solid #ccc;padding:6px">Description</th><th style="border:1px solid #ccc;padding:6px">Vendor</th><th style="border:1px solid #ccc;padding:6px">Expense</th></tr></thead>
+        <tbody id="searchTbody"></tbody>
+      </table>
+    </div>
+  </dialog>
+
+  <dialog id="weekModal">
+    <div>
+      <h3>Weekly Summary</h3>
+      <p id="weekRange"></p>
+      <p><strong>Total hours:</strong> <span id="weekHours">0</span></p>
+      <p><strong>Total expenses:</strong> <span id="weekExpenses">$0.00</span></p>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="weekPrintBtn" class="btn" type="button">Print PDF</button>
+        <button id="clearWeekBtn" class="btn-danger" type="button">Clear week</button>
+        <button id="weekCloseBtn" type="button">Close</button>
+      </div>
+      <small>Note: clearing requires password.</small>
+    </div>
+  </dialog>
+
+  <div id="errorBanner" class="error-banner"></div>
+
+  <!-- Iframe oculto solo para imprimir (evita popups en Opera iOS) -->
+  <iframe id="printFrame" title="printer" style="position:fixed;left:-9999px;top:-9999px;width:0;height:0;border:0"></iframe>
+
+  <script>
+  'use strict';
+  function $(s){ return document.querySelector(s); }
+  function money(n){ return (n||0).toLocaleString('en-US',{style:'currency',currency:'USD'}); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+  function nl2br(s){ return escapeHtml(s).replace(/\n/g,'<br>'); }
+
+  (function initWhenReady(){
+    if(document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', initApp, { once:true });
+    } else { initApp(); }
+  })();
+
+  /* ---------- impresión segura sin ventanas emergentes ---------- */
+  function safePrintHtml(html){
+    try{
+      var frame = document.getElementById('printFrame');
+      if(!frame){
+        frame = document.createElement('iframe');
+        frame.id = 'printFrame';
+        frame.style.position='fixed'; frame.style.left='-9999px'; frame.style.top='-9999px';
+        frame.style.width='0'; frame.style.height='0'; frame.style.border='0';
+        document.body.appendChild(frame);
+      }
+      var doc = frame.contentDocument || frame.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(function(){ try{ frame.contentWindow.focus(); frame.contentWindow.print(); }catch(_){} }, 200);
+    }catch(e){ alert('Print failed: '+(e && e.message ? e.message : e)); }
+  }
+  /* -------------------------------------------------------------- */
+
+  function initApp(){
+    try{
+      var tbody = $('#tbody');
+      var thumb = $('#thumb');
+      var fileInput = $('#receiptInput');
+      var status = $('#status');
+      var saveBtn = $('#saveBtn');
+      var clearFormBtn = $('#clearFormBtn');
+      var deleteBtn = $('#deleteBtn');
+      var printBtn = $('#printPeriodBtn');
+      var closeWeekBtn = $('#closeWeekBtn');
+      var calendarDate = $('#calendarDate');
+
+      var imgModal = $('#imgModal');
+      var modalImg = $('#modalImg');
+      var closeModalBtn = $('#closeModalBtn');
+
+      var camModal = $('#camModal');
+      var camVideo = $('#camVideo');
+      var openCamBtn = $('#openCamBtn');
+      var snapBtn = $('#snapBtn');
+      var closeCamBtn = $('#closeCamBtn');
+
+      var weekModal = $('#weekModal');
+      var weekRange = $('#weekRange');
+      var weekHoursEl = $('#weekHours');
+      var weekExpensesEl = $('#weekExpenses');
+      var weekPrintBtn = $('#weekPrintBtn');
+      var clearWeekBtn = $('#clearWeekBtn');
+      var weekCloseBtn = $('#weekCloseBtn');
+
+      var openSearchBtn = $('#openSearchBtn');
+      var searchModal = $('#searchModal');
+      var searchDate = $('#searchDate');
+      var searchVendor = $('#searchVendor');
+      var searchDesc = $('#searchDesc');
+      var searchAmount = $('#searchAmount');
+      var runSearchBtn = $('#runSearchBtn');
+      var clearSearchBtn = $('#clearSearchBtn');
+      var closeSearchBtn = $('#closeSearchBtn');
+      var printSearchBtn = $('#printSearchBtn');
+      var searchTbody = $('#searchTbody');
+      var lastSearchHTML = '';
+      var clearHistoryBtn = $('#clearHistoryBtn');
+
+      var STORAGE_KEY='worklog_v1';
+      var HISTORY_KEY='worklog_history_v1';
+      var editingId=null;
+
+      function loadAll(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); } catch(e){ return []; } }
+      function saveAll(entries){ localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
+      function loadHistory(){ try { return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]'); } catch(e){ return []; } }
+      function saveHistory(arr){ localStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); }
+      function renderHistory(){ var list=document.getElementById('historyList'); if(!list) return; var h=loadHistory(); list.innerHTML=''; var frag=document.createDocumentFragment(); for(var i=h.length-1;i>=0;i--){ var li=document.createElement('li'); var e=h[i]; li.textContent=(e.date||'')+' • '+(e.vendor||'')+' • '+(e.hours||0)+'h • '+(e.amount? money(e.amount):'$0'); frag.appendChild(li);} list.appendChild(frag);} 
+
+      function localYYYYMMDD(d){ var dt=new Date(d); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,'0')+"-"+String(dt.getDate()).padStart(2,'0'); }
+      function mondayOf(date){ var d=new Date(date); var day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); d.setHours(0,0,0,0); return d; }
+      function sundayOf(date){ var m=mondayOf(date); var s=new Date(m); s.setDate(m.getDate()+6); s.setHours(23,59,59,999); return s; }
+
+      function render(){
+        var all=loadAll();
+        tbody.innerHTML='';
+        var frag=document.createDocumentFragment();
+        for(var i=0;i<all.length;i++){
+          var e=all[i];
+          var tr=document.createElement('tr');
+          var desc=nl2br(e.task||'');
+          tr.innerHTML='<td>'+escapeHtml(e.date||'')+'</td>'+
+                       '<td>'+escapeHtml((e.hours!=null? e.hours : ''))+'</td>'+
+                       '<td>'+desc+'</td>'+
+                       '<td>'+escapeHtml(e.vendor||'')+'</td>'+
+                       '<td>'+(e.amount? money(e.amount): '')+'</td>'+
+                       '<td>'+(e.receipt? '<img src="'+e.receipt+'" style="max-width:60px">':'')+'</td>'+
+                       '<td><button data-id="'+e.id+'" data-act="edit" type="button">Edit</button> <button data-id="'+e.id+'" data-act="del" type="button">Delete</button></td>';
+          frag.appendChild(tr);
+        }
+        tbody.appendChild(frag);
+      }
+
+      function resetForm(){ editingId=null; $('#date').value = localYYYYMMDD(new Date()); $('#hours').value=''; $('#task').value=''; $('#amount').value=''; $('#vendor').value=''; thumb.innerHTML=''; status && (status.textContent=''); }
+      function checkPassword(){ var p=prompt('Enter password to confirm (hint: 123)'); return p==='123'; }
+      function entriesInWeek(base){ var start=mondayOf(base), end=sundayOf(base); var all=loadAll(); return all.filter(function(e){ var d=new Date((e.date||'')+'T00:00'); return d>=start && d<=end; }); }
+
+      if(saveBtn){ saveBtn.addEventListener('click', function(){
+        var obj={ id: editingId || String(Date.now()), date: $('#date').value || localYYYYMMDD(new Date()), hours: parseFloat($('#hours').value||0), task: $('#task').value||'', amount: parseFloat($('#amount').value||0), vendor: $('#vendor').value||'', receipt: (thumb.querySelector('img')? thumb.querySelector('img').src : '') };
+        var all=loadAll(); if(editingId){ for(var i=0;i<all.length;i++){ if(all[i].id===editingId){ all[i]=obj; break; } } } else { all.push(obj); }
+        saveAll(all); render(); resetForm(); status && (status.textContent='Saved!');
+        var hist=loadHistory(); hist.push({id:obj.id,date:obj.date,vendor:obj.vendor,hours:obj.hours,amount:obj.amount,ts:Date.now()}); saveHistory(hist); renderHistory();
+      }); }
+
+      if(clearFormBtn){ clearFormBtn.addEventListener('click', resetForm); }
+      if(deleteBtn){ deleteBtn.addEventListener('click', function(){ if(!editingId) return; if(!checkPassword()) return; var kept=loadAll().filter(function(x){ return x.id!==editingId; }); saveAll(kept); render(); resetForm(); }); }
+
+      if(tbody){ tbody.addEventListener('click', function(e){
+        if(e.target && e.target.tagName==='IMG'){
+          if(modalImg) modalImg.src=e.target.src; if(imgModal && imgModal.showModal) imgModal.showModal(); return;
+        }
+        var btn=e.target.closest('button'); if(!btn) return; var id=btn.getAttribute('data-id'); var act=btn.getAttribute('data-act'); var all=loadAll();
+        if(act==='del'){ if(!checkPassword()) return; saveAll(all.filter(function(x){ return x.id!==id; })); render(); return; }
+        if(act==='edit'){ var item=all.find(function(x){ return x.id===id; }); if(!item) return; editingId=id; $('#date').value=item.date||''; $('#hours').value=item.hours||''; $('#task').value=item.task||''; $('#amount').value=item.amount||''; $('#vendor').value=item.vendor||''; thumb.innerHTML=item.receipt? '<img src="'+item.receipt+'">':''; status && (status.textContent='Editing entry'); }
+      }); }
+
+      if(closeModalBtn){ closeModalBtn.addEventListener('click', function(){ if(imgModal) imgModal.close(); }); }
+
+      if(fileInput){ fileInput.addEventListener('change', function(e){ var f=e.target.files && e.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(){ thumb.innerHTML='<img src="'+r.result+'">'; }; r.readAsDataURL(f); }); }
+
+      var exportBtn=document.getElementById('exportBtn');
+      var importBtn=document.getElementById('importBtn');
+      var importFile=document.getElementById('importFile');
+      var backupUnlocked=false; var backupLockStatus=document.getElementById('backupLockStatus');
+      function setBackupLockLabel(){ if(backupLockStatus) backupLockStatus.textContent = backupUnlocked ? '🔓 Unlocked' : '🔒 Locked'; }
+      function ensureBackupUnlocked(){ if(backupUnlocked) return true; if(checkPassword()){ backupUnlocked=true; setBackupLockLabel(); return true; } return false; }
+      setBackupLockLabel();
+      document.addEventListener('visibilitychange', function(){ if(document.hidden){ backupUnlocked=false; setBackupLockLabel(); } });
+      window.addEventListener('beforeunload', function(){ backupUnlocked=false; setBackupLockLabel(); });
+
+      if(exportBtn){ exportBtn.addEventListener('click', function(){ if(!ensureBackupUnlocked()) return; try{ var data=JSON.stringify(loadAll(),null,2); var blob=new Blob([data],{type:'application/json'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; var ts=new Date(); var fname='worklog_backup_'+ts.getFullYear()+'-'+String(ts.getMonth()+1).padStart(2,'0')+'-'+String(ts.getDate()).padStart(2,'0')+'.json'; a.download=fname; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },0);}catch(err){ alert('Export failed: '+err.message); } }); }
+      if(importBtn && importFile){ importBtn.addEventListener('click', function(){ if(!ensureBackupUnlocked()) return; importFile.click(); }); importFile.addEventListener('change', function(e){ var f=e.target.files && e.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result||'[]'); if(!Array.isArray(arr)) throw new Error('Invalid file'); if(!confirm('This will replace current data. Continue?')) return; saveAll(arr); render(); alert('Import completed.'); }catch(err){ alert('Import failed: '+err.message); } finally { importFile.value=''; } }; r.readAsText(f); }); }
+
+      var camStream=null;
+      function startCamera(){ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Camera not supported');return Promise.reject(new Error('no getUserMedia'));} return navigator.mediaDevices.getUserMedia({video:true}).then(function(stream){ camStream=stream; camVideo.srcObject=stream; return stream; }); }
+      function stopCamera(){ if(camStream){ try{ camStream.getTracks().forEach(function(t){ t.stop(); }); }catch(_){} camStream=null; camVideo.srcObject=null; } }
+      function takeSnapshot(){ if(!camVideo.videoWidth) return; var c=document.createElement('canvas'); c.width=camVideo.videoWidth; c.height=camVideo.videoHeight; c.getContext('2d').drawImage(camVideo,0,0); var dataUrl=c.toDataURL('image/jpeg',0.9); thumb.innerHTML='<img src="'+dataUrl+'" style="max-width:60px">'; }
+      var openCamBtnEl = $('#openCamBtn');
+      if(openCamBtnEl){ openCamBtnEl.addEventListener('click', function(){ startCamera().then(function(){ if(camModal && camModal.showModal) camModal.showModal(); }); }); }
+      if(closeCamBtn){ closeCamBtn.addEventListener('click', function(){ stopCamera(); if(camModal) camModal.close(); }); }
+      if(snapBtn){ snapBtn.addEventListener('click', function(){ takeSnapshot(); stopCamera(); if(camModal) camModal.close(); status && (status.textContent='Photo captured'); }); }
+
+      function doSearch(){
+        var all=loadAll();
+        var d=searchDate && searchDate.value;
+        var v=(searchVendor && searchVendor.value||'').trim().toLowerCase();
+        var desc=(searchDesc && searchDesc.value||'').trim().toLowerCase();
+        var amtStr=(searchAmount && searchAmount.value||'').trim();
+        var amt = amtStr ? Number(amtStr) : null;
+        var hrs=0, exp=0;
+        var filtered = all.filter(function(e){
+          var ok=true;
+          if(d){ ok = ok && (e.date===d); }
+          if(v){ ok = ok && String(e.vendor||'').toLowerCase().indexOf(v)!==-1; }
+          if(desc){ ok = ok && String(e.task||'').toLowerCase().indexOf(desc)!==-1; }
+          if(amt!==null && !Number.isNaN(amt)){ ok = ok && Number(e.amount||0)===amt; }
+          return ok;
+        });
+        filtered.forEach(function(e){ hrs += Number(e.hours)||0; exp += Number(e.amount)||0; });
+        var rows=filtered.map(function(e){ return '<tr><td style="border:1px solid #ccc;padding:6px">'+escapeHtml(e.date||'')+'</td><td style="border:1px solid #ccc;padding:6px">'+escapeHtml(e.hours||'')+'</td><td style="border:1px solid #ccc;padding:6px">'+nl2br(e.task||'')+'</td><td style="border:1px solid #ccc;padding:6px">'+escapeHtml(e.vendor||'')+'</td><td style="border:1px solid #ccc;padding:6px">'+(e.amount?money(e.amount):'')+'</td></tr>'; }).join('');
+        if(searchTbody) searchTbody.innerHTML = (rows || '<tr><td colspan="5" style="text-align:center;padding:8px;border:1px solid #ccc">No results</td></tr>') + (filtered.length? '<tr><td colspan="5" style="text-align:right;padding:6px;border:1px solid #ccc"><b>Total hours:</b> '+hrs.toFixed(2)+' | <b>Total expenses:</b> '+money(exp)+'</td></tr>':'' );
+        lastSearchHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="border:1px solid #ccc;padding:6px">Date</th><th style="border:1px solid #ccc;padding:6px">Hours</th><th style="border:1px solid #ccc;padding:6px">Description</th><th style="border:1px solid #ccc;padding:6px">Vendor</th><th style="border:1px solid #ccc;padding:6px">Expense</th></tr></thead><tbody>'+rows+'</tbody></table><p><b>Total hours:</b> '+hrs.toFixed(2)+' | <b>Total expenses:</b> '+money(exp)+'</p>';
+      }
+      if(openSearchBtn){ openSearchBtn.addEventListener('click', function(){ if(searchModal && searchModal.showModal) searchModal.showModal(); }); }
+      if(runSearchBtn){ runSearchBtn.addEventListener('click', doSearch); }
+      if(clearSearchBtn){ clearSearchBtn.addEventListener('click', function(){ if(searchDate) searchDate.value=''; if(searchVendor) searchVendor.value=''; if(searchDesc) searchDesc.value=''; if(searchAmount) searchAmount.value=''; if(searchTbody) searchTbody.innerHTML=''; lastSearchHTML=''; }); }
+      if(closeSearchBtn){ closeSearchBtn.addEventListener('click', function(){ if(searchModal) searchModal.close(); }); }
+      if(printSearchBtn){ printSearchBtn.addEventListener('click', function(){
+        if(!lastSearchHTML){ doSearch(); }
+        var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Search Results</title><style>body{font-family:Arial;margin:16px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #999;padding:6px;vertical-align:top} th{background:#eee}</style></head><body><h2>Search Results</h2>'+ lastSearchHTML +'</body></html>';
+        safePrintHtml(html);
+      }); }
+
+      function printAllToPdf(){
+        var all=loadAll(); var h=0,a=0;
+        var rows=all.map(function(e){
+          h+=Number(e.hours)||0; a+=Number(e.amount)||0;
+          return '<tr><td>'+escapeHtml(e.date||'')+'</td><td>'+escapeHtml(e.hours||'')+'</td><td>'+nl2br(e.task||'')+'</td><td>'+escapeHtml(e.vendor||'')+'</td><td>'+(e.amount?money(e.amount):'')+'</td><td>'+(e.receipt?"<img src=\""+e.receipt+"\" style=\"max-width:80px\">":"")+'</td></tr>';
+        }).join('');
+        var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>WorkLog PDF</title><style>body{font-family:Arial;margin:16px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #999;padding:6px;vertical-align:top} th{background:#eee}</style></head><body>'+
+          '<h2>WorkLog Report</h2>'+
+          '<table><thead><tr><th>Date</th><th>Hours</th><th>Description</th><th>Vendor</th><th>Expense</th><th>Receipt</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+          '<p><b>Total hours:</b> '+h.toFixed(2)+' | <b>Total expenses:</b> '+money(a)+'</p>'+
+        '</body></html>';
+        safePrintHtml(html);
+      }
+      if(printBtn){ printBtn.addEventListener('click', printAllToPdf); }
+
+      if(closeWeekBtn){ closeWeekBtn.addEventListener('click', function(){
+        var base=(calendarDate&&calendarDate.value)? new Date(calendarDate.value) : new Date();
+        var start=mondayOf(base), end=sundayOf(base);
+        var entries=entriesInWeek(base);
+        var hours=entries.reduce(function(t,e){ return t+(Number(e.hours)||0); },0);
+        var exp=entries.reduce(function(t,e){ return t+(Number(e.amount)||0); },0);
+        weekRange.textContent = 'Range: '+start.toLocaleDateString()+' – '+end.toLocaleDateString();
+        weekHoursEl.textContent = hours.toFixed(2);
+        weekExpensesEl.textContent = money(exp);
+        if(weekModal && weekModal.showModal) weekModal.showModal();
+        if(weekPrintBtn){ weekPrintBtn.onclick = printAllToPdf; }
+        if(clearWeekBtn){ clearWeekBtn.onclick = function(){ if(!checkPassword()) return; var all=loadAll(); var kept=all.filter(function(e){ var d=new Date((e.date||'')+'T00:00'); return !(d>=start && d<=end); }); saveAll(kept); render(); if(weekModal) weekModal.close(); }; }
+        if(weekCloseBtn){ weekCloseBtn.onclick = function(){ if(weekModal) weekModal.close(); }; }
+      }); }
+
+      var todayStr = localYYYYMMDD(new Date());
+      var dateInput = $('#date'); if(dateInput) dateInput.value = todayStr;
+      if(calendarDate) calendarDate.value = todayStr;
+
+      render();
+      renderHistory();
+
+      if(clearHistoryBtn){
+        clearHistoryBtn.addEventListener('click', function(){
+          if(!confirm('Clear all history?')) return;
+          localStorage.removeItem(HISTORY_KEY);
+          renderHistory();
+          alert('History cleared.');
+        });
+      }
+
+    }catch(err){ showError(err); }
+  }
+
+  function showError(err){
+    console.error(err);
+    var b=document.getElementById('errorBanner');
+    if(!b) return; b.style.display='block'; b.textContent='Error: '+ (err && err.message? err.message : err);
+  }
+  window.addEventListener('error', function(e){ showError(e.error||e.message); });
+  </script>
+</body>
+</html>
